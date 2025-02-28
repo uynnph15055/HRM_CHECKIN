@@ -1,5 +1,5 @@
-import { Box, Link, Stack } from "@mui/material";
-import Logo from "@/assets/images/logo.png?url";
+import { Box, Link, Stack, Typography } from "@mui/material";
+import Logo from "@/assets/images/logo.png";
 
 export const HomePage = () => {
   return (
@@ -27,7 +27,7 @@ export const HomePage = () => {
             textDecoration: "none",
           }}
         >
-          Bắt đầu checkin/checkout
+          <Typography variant="body2">Bắt đầu checkin/checkout</Typography>
         </Link>
       </Stack>
     </Stack>

@@ -1,29 +1,74 @@
-import { Stack, Typography, Box, CircularProgress } from "@mui/material";
+import { Stack, Box, Typography, keyframes } from "@mui/material";
 import { useEffect, useRef, useState } from "react";
 import * as faceapi from "face-api.js";
+import CameraDefault from "@/assets/images/camera-default.jpg";
+import CircularProgress from "@mui/material/CircularProgress";
+import { API_URL, DataType, TypeCheckedFace } from "@/types/type";
 
-const Camera = () => {
+interface CameraProps {
+  staff: DataType | undefined;
+  setStaff: React.Dispatch<React.SetStateAction<DataType | undefined>>;
+}
+
+const Camera: React.FC<CameraProps> = ({ staff, setStaff }) => {
+  const [isChecked, setIsChecked] = useState(TypeCheckedFace[0]);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [image, setImage] = useState<File | null>(null);
-  const [faceDescriptor, setFaceDescriptor] = useState<Float32Array | null>(
-    null
-  );
-  const [isCheckingFace, setIsCheckingFace] = useState<boolean>(false);
-  const [isModelLoaded, setIsModelLoaded] = useState<boolean>(false);
+  const [timeNow, setTimeNow] = useState("");
+  const [image, setImage] = useState("");
+
+  const getCurrentTime = () => {
+    const now = new Date();
+    const hours = now.getHours().toString().padStart(2, "0");
+    const minutes = now.getMinutes().toString().padStart(2, "0");
+    setTimeNow(String(hours) + ":" + String(minutes));
+  };
 
   useEffect(() => {
-    const loadModels = async () => {
-      const MODEL_URL = "/models";
-      await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
-      await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
-      await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-      setIsModelLoaded(true);
-      startVideo();
+    if (staff) {
+      const loadModels = async () => {
+        const MODEL_URL = "/models";
+        await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
+        await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+        await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+        startVideo();
+      };
+
+      loadModels();
+    } else {
+      setImage("");
+    }
+  }, [staff]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const body = {
+          username: staff?.username,
+          employeeId: staff?.employee.id,
+          time: "08:30:20",
+          attendances: true,
+        };
+        const response = await fetch(API_URL + "/external/find/vector", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to create post");
+        }
+
+        const postData = await response.json();
+      } catch (error) {
+        console.error("Lỗi khi lấy dữ liệu:", error);
+      }
     };
 
-    loadModels();
-  }, []);
+    if (isChecked === TypeCheckedFace[2] && timeNow) fetchData();
+  }, [isChecked, timeNow]);
 
   const startVideo = () => {
     navigator.mediaDevices
@@ -31,82 +76,122 @@ const Camera = () => {
       .then((stream) => {
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
+
+          videoRef.current.onloadeddata = () => {
+            detectLiveFace();
+          };
         }
       })
       .catch((err) => console.error("Lỗi mở webcam:", err));
   };
 
-  const handleImageUpload = async (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    if (!isModelLoaded) return;
-    if (event.target.files && event.target.files[0]) {
-      const file = event.target.files[0];
-      setImage(file);
-      setIsCheckingFace(true);
-
-      const img = await faceapi.bufferToImage(file);
-      const detection = await faceapi
-        .detectSingleFace(img)
-        .withFaceLandmarks()
-        .withFaceDescriptor();
-
-      if (detection) {
-        setFaceDescriptor(detection.descriptor);
-        console.log("🔍 Ảnh đã tải lên được quét xong.");
-        detectLiveFace(detection.descriptor); // Bắt đầu quét từ camera ngay sau khi upload
-      } else {
-        console.log("❌ Không phát hiện khuôn mặt trong ảnh!");
-        setIsCheckingFace(false);
-      }
-    }
+  const base64ToImage = (base64: string): Promise<HTMLImageElement> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.src = base64;
+      img.onload = () => resolve(img);
+      img.onerror = (err) => reject(err);
+    });
   };
 
-  const detectLiveFace = async (uploadedDescriptor: Float32Array) => {
-    if (!videoRef.current || !canvasRef.current) return;
+  const getDescriptorFromBase64 = async (base64: string) => {
+    const img = await base64ToImage(base64);
+    const detection = await faceapi
+      .detectSingleFace(img)
+      .withFaceLandmarks()
+      .withFaceDescriptor();
+
+    if (!detection) {
+      console.error("Không tìm thấy khuôn mặt trong ảnh Base64!");
+      return null;
+    }
+
+    return detection.descriptor;
+  };
+
+  const detectLiveFace = async () => {
+    if (!videoRef.current || !canvasRef.current || !staff) return;
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    const displaySize = { width: video.videoWidth, height: video.videoHeight };
-    faceapi.matchDimensions(canvas, displaySize);
+
+    if (video.videoWidth === 0 || video.videoHeight === 0) {
+      console.error("Kích thước video không hợp lệ!");
+      return;
+    }
+
+    faceapi.matchDimensions(canvas, {
+      width: video.videoWidth,
+      height: video.videoHeight,
+    });
+
+    const uploadedDescriptor = await getDescriptorFromBase64(
+      staff.avartarBase64
+    );
+    if (!uploadedDescriptor) return;
 
     const detect = async () => {
       if (!videoRef.current) return;
-      setIsCheckingFace(true);
       const detection = await faceapi
         .detectSingleFace(videoRef.current)
         .withFaceLandmarks()
         .withFaceDescriptor();
-      setIsCheckingFace(false);
 
       if (detection) {
         const distance = faceapi.euclideanDistance(
           uploadedDescriptor,
           detection.descriptor
         );
-        console.log("Khoảng cách khuôn mặt:", distance);
 
-        if (distance < 0.6) {
-          console.log("✅ Khuôn mặt trùng khớp!");
+        if (distance < 0.4) {
+          setIsChecked(TypeCheckedFace[2]);
         } else {
-          console.log("❌ Không khớp! Vui lòng thử lại.");
+          setIsChecked(TypeCheckedFace[1]);
         }
 
-        const context = canvas.getContext("2d");
-        if (context) {
-          context.clearRect(0, 0, canvas.width, canvas.height);
-          faceapi.draw.drawDetections(
-            canvas,
-            faceapi.resizeResults(detection, displaySize)
-          );
-          context.fillStyle = "white";
-          context.font = "20px Arial";
-          context.fillText(`Similarity: ${(1 - distance).toFixed(2)}`, 10, 30);
-        }
+        captureImage(video);
+
+        getCurrentTime();
+        stopVideo();
+      } else {
+        requestAnimationFrame(detect); // Tiếp tục detect nếu chưa thấy khuôn mặt
       }
     };
 
-    await detect();
+    detect();
   };
+
+  const captureImage = (video: HTMLVideoElement) => {
+    const capturedCanvas = document.createElement("canvas");
+    capturedCanvas.width = video.videoWidth;
+    capturedCanvas.height = video.videoHeight;
+    const capturedCtx = capturedCanvas.getContext("2d");
+
+    if (capturedCtx) {
+      capturedCtx.drawImage(
+        video,
+        0,
+        0,
+        capturedCanvas.width,
+        capturedCanvas.height
+      );
+      const imageData = capturedCanvas.toDataURL("image/png");
+      setImage(imageData);
+      console.log("Ảnh đã chụp:", imageData);
+    }
+  };
+
+  const stopVideo = () => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach((track) => track.stop());
+      videoRef.current.srcObject = null;
+    }
+  };
+
+  const blink = keyframes`
+  0% { opacity: 1; }
+  100% { opacity: 0.3; }
+`;
 
   return (
     <Stack
@@ -114,68 +199,99 @@ const Camera = () => {
       alignItems="center"
       sx={{ width: "100%", maxWidth: 400, mx: "auto" }}
     >
-      {/* <input
-        type="file"
-        accept="image/*"
-        onChange={handleImageUpload}
-        disabled={!isModelLoaded}
-      />
-
-      {image && (
+      <Stack sx={{ display: "flex", justifyContent: "start" }}>
         <Box
           sx={{
-            width: 160,
-            height: 160,
-            overflow: "hidden",
-            borderRadius: "8px",
-            border: "1px solid #ddd",
+            width: 10,
+            height: 10,
+            backgroundColor: "red",
+            borderRadius: "50%",
+            animation: `${blink} 1s infinite alternate`,
           }}
-        >
+        />
+      </Stack>
+      {staff && typeof staff.avartarBase64 === "string" ? (
+        image ? (
+          <Box>
+            <img
+              style={{
+                objectFit: "cover",
+                height: "200px",
+              }}
+              width="100%"
+              src={image}
+            />
+          </Box>
+        ) : (
+          <Box sx={{ position: "relative" }}>
+            <video
+              ref={videoRef}
+              autoPlay
+              muted
+              style={{
+                width: "100%",
+                height: "100%",
+                borderRadius: "8px",
+                boxShadow: "0px 4px 10px rgba(0,0,0,0.1)",
+              }}
+            ></video>
+            <canvas
+              ref={canvasRef}
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: "100%",
+                height: "100%",
+              }}
+            ></canvas>
+          </Box>
+        )
+      ) : (
+        <Box>
           <img
-            src={URL.createObjectURL(image)}
-            alt="Uploaded Face"
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            style={{
+              objectFit: "cover",
+              height: "200px",
+            }}
+            width="100%"
+            src={CameraDefault}
           />
         </Box>
-      )} */}
-
-      {/* {isCheckingFace ? (
-        <Stack direction="row" alignItems="center" spacing={1}>
-          <CircularProgress size={20} />
-          <Typography variant="body2" color="textSecondary">
-            Đang kiểm tra khuôn mặt...
-          </Typography>
-        </Stack>
+      )}
+      {staff && typeof staff.avartarBase64 === "string" ? (
+        image ? (
+          <>
+            <Typography variant="body2" color="success">
+              Bạn đã check in thành công !
+            </Typography>
+            <Typography
+              variant="h6"
+              style={{
+                marginTop: "5px",
+              }}
+              color="info"
+            >
+              {timeNow}
+            </Typography>
+          </>
+        ) : (
+          <>
+            <CircularProgress size={20} />
+            <Typography variant="body2" color="textSecondary">
+              Vui lòng nhìn thẳng vào camera
+            </Typography>
+          </>
+        )
       ) : (
-        <Typography variant="body2" color="textSecondary">
-          Vui lòng tải ảnh lên và nhìn vào camera
+        <Typography
+          variant="caption"
+          sx={{ fontStyle: "italic" }}
+          color="textSecondary"
+        >
+          Không có thông tin !
         </Typography>
-      )} */}
-
-      {/* Video và Canvas */}
-      <Box sx={{ position: "relative" }}>
-        <video
-          ref={videoRef}
-          autoPlay
-          muted
-          style={{
-            width: "100%",
-            height: "100%",
-            borderRadius: "8px",
-            boxShadow: "0px 4px 10px rgba(0,0,0,0.1)",
-          }}
-        ></video>
-        <canvas
-          ref={canvasRef}
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: "100%",
-          }}
-        ></canvas>
-      </Box>
+      )}
     </Stack>
   );
 };
