@@ -1,9 +1,15 @@
-import { Stack, Box, Typography, keyframes } from "@mui/material";
+import { Stack, Box, Typography, keyframes, Button } from "@mui/material";
 import { useEffect, useRef, useState } from "react";
 import * as faceapi from "face-api.js";
 import CameraDefault from "@/assets/images/camera-default.jpg";
 import CircularProgress from "@mui/material/CircularProgress";
-import { API_URL, DataType, TypeCheckedFace } from "@/types/type";
+import {
+  API_URL,
+  DataType,
+  ResponseCheckTime,
+  TypeCheckedFace,
+  TypeCheckInOut,
+} from "@/types/type";
 
 interface CameraProps {
   staff: DataType | undefined;
@@ -11,7 +17,12 @@ interface CameraProps {
 }
 
 const Camera: React.FC<CameraProps> = ({ staff, setStaff }) => {
-  const [isChecked, setIsChecked] = useState(TypeCheckedFace[0]);
+  const [isChecked, setIsChecked] = useState<(typeof TypeCheckedFace)[number]>(
+    TypeCheckedFace[0]
+  );
+  const [typeChecking, setTypeChecking] = useState<
+    (typeof TypeCheckInOut)[number]
+  >(TypeCheckInOut[0]);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [timeNow, setTimeNow] = useState("");
@@ -21,24 +32,28 @@ const Camera: React.FC<CameraProps> = ({ staff, setStaff }) => {
     const now = new Date();
     const hours = now.getHours().toString().padStart(2, "0");
     const minutes = now.getMinutes().toString().padStart(2, "0");
-    setTimeNow(String(hours) + ":" + String(minutes));
+    const seconds = now.getSeconds().toString().padStart(2, "0");
+    setTimeNow(String(hours) + ":" + String(minutes) + ":" + String(seconds));
   };
 
   useEffect(() => {
-    if (staff) {
-      const loadModels = async () => {
-        const MODEL_URL = "/models";
-        await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
-        await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
-        await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-        startVideo();
-      };
+    const loadModels = async () => {
+      const MODEL_URL = "/models";
+      await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
+      await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+      await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+      startVideo();
+    };
 
-      loadModels();
+    if (staff) {
+      if (isChecked === TypeCheckedFace[0]) {
+        loadModels();
+      }
     } else {
       setImage("");
+      setIsChecked(TypeCheckedFace[0]);
     }
-  }, [staff]);
+  }, [staff, isChecked]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -46,10 +61,10 @@ const Camera: React.FC<CameraProps> = ({ staff, setStaff }) => {
         const body = {
           username: staff?.username,
           employeeId: staff?.employee.id,
-          time: "08:30:20",
+          time: timeNow,
           attendances: true,
         };
-        const response = await fetch(API_URL + "/external/find/vector", {
+        const response = await fetch(API_URL + "/external/attendances", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -62,12 +77,17 @@ const Camera: React.FC<CameraProps> = ({ staff, setStaff }) => {
         }
 
         const postData = await response.json();
+        const data: ResponseCheckTime = postData.data;
+        if (data) {
+          if (data.check_out) setTypeChecking(TypeCheckInOut[1]);
+          setIsChecked(TypeCheckedFace[4]);
+        }
       } catch (error) {
         console.error("Lỗi khi lấy dữ liệu:", error);
       }
     };
 
-    if (isChecked === TypeCheckedFace[2] && timeNow) fetchData();
+    if (isChecked === TypeCheckedFace[3] && timeNow) fetchData();
   }, [isChecked, timeNow]);
 
   const startVideo = () => {
@@ -78,6 +98,7 @@ const Camera: React.FC<CameraProps> = ({ staff, setStaff }) => {
           videoRef.current.srcObject = stream;
 
           videoRef.current.onloadeddata = () => {
+            setIsChecked(TypeCheckedFace[1]);
             detectLiveFace();
           };
         }
@@ -101,12 +122,7 @@ const Camera: React.FC<CameraProps> = ({ staff, setStaff }) => {
       .withFaceLandmarks()
       .withFaceDescriptor();
 
-    if (!detection) {
-      console.error("Không tìm thấy khuôn mặt trong ảnh Base64!");
-      return null;
-    }
-
-    return detection.descriptor;
+    return detection && detection.descriptor;
   };
 
   const detectLiveFace = async () => {
@@ -129,8 +145,14 @@ const Camera: React.FC<CameraProps> = ({ staff, setStaff }) => {
     );
     if (!uploadedDescriptor) return;
 
-    const detect = async () => {
-      if (!videoRef.current) return;
+    let elapsedTime = 0;
+    let checkFace = TypeCheckedFace[1];
+    const interval = setInterval(async () => {
+      if (!videoRef.current) {
+        clearInterval(interval);
+        return;
+      }
+
       const detection = await faceapi
         .detectSingleFace(videoRef.current)
         .withFaceLandmarks()
@@ -142,22 +164,32 @@ const Camera: React.FC<CameraProps> = ({ staff, setStaff }) => {
           detection.descriptor
         );
 
-        if (distance < 0.4) {
-          setIsChecked(TypeCheckedFace[2]);
+        if (distance < 0.5) {
+          checkFace = TypeCheckedFace[3];
         } else {
-          setIsChecked(TypeCheckedFace[1]);
+          checkFace = TypeCheckedFace[2];
         }
 
-        captureImage(video);
-
-        getCurrentTime();
-        stopVideo();
-      } else {
-        requestAnimationFrame(detect); // Tiếp tục detect nếu chưa thấy khuôn mặt
+        if (checkFace !== TypeCheckedFace[0]) {
+          setIsChecked(checkFace);
+          captureImage(video);
+          getCurrentTime();
+          stopVideo();
+          return;
+        }
       }
-    };
 
-    detect();
+      elapsedTime += 500;
+
+      if (elapsedTime >= 10000) {
+        if (checkFace !== TypeCheckedFace[3]) {
+          setIsChecked(TypeCheckedFace[2]);
+          captureImage(video);
+          clearInterval(interval);
+          stopVideo();
+        }
+      }
+    }, 500);
   };
 
   const captureImage = (video: HTMLVideoElement) => {
@@ -176,7 +208,6 @@ const Camera: React.FC<CameraProps> = ({ staff, setStaff }) => {
       );
       const imageData = capturedCanvas.toDataURL("image/png");
       setImage(imageData);
-      console.log("Ảnh đã chụp:", imageData);
     }
   };
 
@@ -211,7 +242,9 @@ const Camera: React.FC<CameraProps> = ({ staff, setStaff }) => {
         />
       </Stack>
       {staff && typeof staff.avartarBase64 === "string" ? (
-        image ? (
+        image &&
+        isChecked !== TypeCheckedFace[0] &&
+        isChecked !== TypeCheckedFace[1] ? (
           <Box>
             <img
               style={{
@@ -230,7 +263,7 @@ const Camera: React.FC<CameraProps> = ({ staff, setStaff }) => {
               muted
               style={{
                 width: "100%",
-                height: "100%",
+                height: videoRef ? "200px" : "100%",
                 borderRadius: "8px",
                 boxShadow: "0px 4px 10px rgba(0,0,0,0.1)",
               }}
@@ -260,10 +293,12 @@ const Camera: React.FC<CameraProps> = ({ staff, setStaff }) => {
         </Box>
       )}
       {staff && typeof staff.avartarBase64 === "string" ? (
-        image ? (
+        image && isChecked === TypeCheckedFace[4] ? (
           <>
-            <Typography variant="body2" color="success">
-              Bạn đã check in thành công !
+            <Typography variant="body1" color="success">
+              Bạn đã{" "}
+              {typeChecking === TypeCheckInOut[0] ? "check in" : "checkout"}{" "}
+              thành công !
             </Typography>
             <Typography
               variant="h6"
@@ -274,6 +309,21 @@ const Camera: React.FC<CameraProps> = ({ staff, setStaff }) => {
             >
               {timeNow}
             </Typography>
+          </>
+        ) : image && isChecked === TypeCheckedFace[2] ? (
+          <>
+            <Typography variant="body1" color="error">
+              Khuôn mặt không chính xác !
+            </Typography>
+            <Button
+              onClick={() => setIsChecked(TypeCheckedFace[0])}
+              variant="contained"
+              sx={{
+                textTransform: "capitalize",
+              }}
+            >
+              Thử lại
+            </Button>
           </>
         ) : (
           <>

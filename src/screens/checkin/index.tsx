@@ -6,16 +6,13 @@ import { useState } from "react";
 import { FakeData } from "@/types/face-data";
 import { API_URL, DataType } from "@/types/type";
 
-interface FormData {
-  keyword: string;
-}
-
 const CheckInPage = () => {
   const [keyword, setKeyword] = useState("");
   const [staff, setStaff] = useState<DataType | undefined>();
   const [error, setError] = useState("");
 
   const handelReset = () => {
+    setError("");
     setKeyword("");
     setStaff(undefined);
   };
@@ -72,7 +69,7 @@ const CheckInPage = () => {
       >
         <Box sx={{ width: "150px" }} component="img" src={Logo} />
         <Typography variant="h5" sx={{ marginBottom: "20px" }}>
-          Hệ thống phân tích khuân mặt
+          HỆ THỐNG CHẤM CÔNG
         </Typography>
       </Box>
       <Stack
@@ -171,13 +168,13 @@ const CheckInPage = () => {
                 </Box>
                 <Button
                   onClick={handleSubmit}
-                  disabled={!keyword}
+                  disabled={!keyword || staff !== undefined}
                   variant="contained"
                 >
                   Tìm kiếm
                 </Button>
               </div>
-              {error && (
+              {error && !staff && (
                 <Typography
                   variant="caption"
                   color="#ec0729"

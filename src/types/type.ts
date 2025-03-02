@@ -16,6 +16,27 @@ export type DataType = {
   };
 };
 
-export const TypeCheckedFace = ["PENDING", "FAIL", "SUCCESS"];
+export type ResponseCheckTime = {
+  id: number;
+  employee_id: string;
+  work_date: string;
+  check_in: string;
+  check_out?: string;
+  office_minutes: number;
+  late_early_minutes: number;
+  overtime_hours: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export const TypeCheckedFace = [
+  "START",
+  "PENDING",
+  "FACE_FAIL",
+  "FACE_SUCCESS",
+  "SUCCESS",
+];
+
+export const TypeCheckInOut = ["CHECK_IN", "CHECK_OUT"];
 
 export const Loading = ["loading", "none"];
