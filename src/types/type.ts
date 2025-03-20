@@ -2,18 +2,16 @@ export const API_URL = "http://hrm.test/api";
 
 export type DataType = {
   id: string;
-  username: string;
-  face_vector: never[];
-  avartar: string;
+  user_id: string;
+  first_name: string;
+  last_name: string;
+  personal_email: string;
+  phone: string;
+  current_address: string;
+  birthday: string;
   avartarBase64: string;
-  employee: {
-    id: string;
-    first_name: string;
-    last_name: string;
-    personal_email: string;
-    phone: string;
-    current_address: string;
-  };
+  code: string;
+  gender: string;
 };
 
 export type ResponseCheckTime = {

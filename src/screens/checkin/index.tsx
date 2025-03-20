@@ -5,6 +5,7 @@ import UserDefault from "@/assets/images/user-default.jpg";
 import { useState } from "react";
 import { FakeData } from "@/types/face-data";
 import { API_URL, DataType } from "@/types/type";
+import moment from "moment";
 
 const CheckInPage = () => {
   const [keyword, setKeyword] = useState("");
@@ -31,7 +32,7 @@ const CheckInPage = () => {
       const body = {
         username: keyword.trim(),
       };
-      const response = await fetch(API_URL + "/external/find/vector", {
+      const response = await fetch(API_URL + "/external/find/employee", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -200,9 +201,7 @@ const CheckInPage = () => {
                   }}
                 >
                   <strong>Họ và tên:</strong>{" "}
-                  {staff
-                    ? staff.employee.first_name + " " + staff.employee.last_name
-                    : ""}
+                  {staff ? staff.first_name + " " + staff.last_name : ""}
                 </Typography>
                 <Typography
                   variant="body2"
@@ -211,8 +210,8 @@ const CheckInPage = () => {
                     borderBottom: "1px solid #F0F0F0",
                   }}
                 >
-                  <strong>Email:</strong>{" "}
-                  {staff ? staff.employee.personal_email : ""}
+                  <strong>Ngày sinh:</strong>{" "}
+                  {staff ? moment(staff.birthday).format("DD/MM/YYYY") : ""}
                 </Typography>
                 <Typography
                   variant="body2"
@@ -221,8 +220,8 @@ const CheckInPage = () => {
                     borderBottom: "1px solid #F0F0F0",
                   }}
                 >
-                  <strong>Số điện thoại:</strong>{" "}
-                  {staff ? staff.employee.phone : ""}
+                  <strong>Giới tính:</strong>{" "}
+                  {staff && staff.gender == "2" ? "Nam" : "Nữ"}
                 </Typography>
                 <Typography
                   variant="body2"
@@ -231,8 +230,16 @@ const CheckInPage = () => {
                     borderBottom: "1px solid #F0F0F0",
                   }}
                 >
-                  <strong>Địa chỉ:</strong>{" "}
-                  {staff ? staff.employee.current_address : ""}
+                  <strong>Email:</strong> {staff ? staff.personal_email : ""}
+                </Typography>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    paddingBottom: "10px",
+                    borderBottom: "1px solid #F0F0F0",
+                  }}
+                >
+                  <strong>Số điện thoại:</strong> {staff ? staff.phone : ""}
                 </Typography>
               </Box>
             </Box>

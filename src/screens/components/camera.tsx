@@ -59,8 +59,8 @@ const Camera: React.FC<CameraProps> = ({ staff, setStaff }) => {
     const fetchData = async () => {
       try {
         const body = {
-          username: staff?.username,
-          employeeId: staff?.employee.id,
+          username: staff?.code,
+          employeeId: staff?.id,
           time: timeNow,
           attendances: true,
         };
