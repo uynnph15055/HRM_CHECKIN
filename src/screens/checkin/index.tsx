@@ -221,7 +221,11 @@ const CheckInPage = () => {
                   }}
                 >
                   <strong>Giới tính:</strong>{" "}
-                  {staff && staff.gender == "2" ? "Nam" : "Nữ"}
+                  {staff && staff.gender == "2"
+                    ? "Nam"
+                    : staff && staff.gender == "1"
+                    ? "Nữ"
+                    : ""}
                 </Typography>
                 <Typography
                   variant="body2"
